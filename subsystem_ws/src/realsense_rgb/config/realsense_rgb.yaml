@@ -1,0 +1,8 @@
+realsense_rgb_node:
+  ros__parameters:
+    width: 640
+    height: 480
+    fps: 30
+    topic: /camera/color/image_raw
+    frame_id: camera_color_optical_frame
+    serial_number: ""

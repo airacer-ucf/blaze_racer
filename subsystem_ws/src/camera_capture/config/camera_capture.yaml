@@ -1,0 +1,24 @@
+camera_capture_node:
+  ros__parameters:
+    # PS4 controller button indices (default ds4 mapping on Linux)
+    # Square=0, X=1, Circle=2, Triangle=3
+    photo_button: 1          # X - take a picture
+    record_start_button: 3   # Triangle - start recording
+    record_stop_button: 0    # Square - stop recording
+
+    # Topics
+    joy_topic: "/joy"
+    image_topic: "/camera/color/image_raw"
+
+    # Output settings
+    save_directory: "/home/muib/captures"  # change to path to save images
+    photo_prefix: "photo"
+    video_prefix: "video"
+    image_format: "jpg"      # jpg or png
+    video_format: "mp4"      # mp4 or avi
+    video_fps: 30
+    video_codec: "mp4v"      # mp4v for mp4, MJPG for avi
+
+    # Behavior
+    button_debounce_sec: 0.3
+    log_captures: true
