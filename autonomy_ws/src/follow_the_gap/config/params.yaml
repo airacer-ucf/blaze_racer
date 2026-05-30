@@ -1,13 +1,13 @@
 follow_the_gap_node:
   ros__parameters:
-    bubble_radius: 30
+    bubble_radius: 60
     preprocess_conv_size: 3
     max_lidar_dist: 10.0
-    safe_threshold: 15
+    safe_threshold: 30
     best_point_conv_size: 200
     max_steer: 1.181
     straights_steering_angle: 0.1396
     fast_steering_angle: 0.0698
-    corners_speed: 1.5
-    straights_speed: 2.0
-    fast_speed: 3.5
+    corners_speed: 2.0
+    straights_speed: 3.0
+    fast_speed: 5.5

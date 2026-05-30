@@ -127,7 +127,7 @@ class FollowTheGapNode(Node):
         """
         self.radians_per_elem = (2 * np.pi) / len(ranges)
         
-        # Use only forward-facing points (similar to original code)
+        # Use only forward-facing points
         proc_ranges = np.array(ranges[:])
         
         # Apply moving average
