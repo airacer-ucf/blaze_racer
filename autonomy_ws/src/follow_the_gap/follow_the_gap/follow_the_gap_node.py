@@ -18,7 +18,7 @@ class FollowTheGapNode(Node):
         self.declare_parameter('max_lidar_dist', 10.0)
         self.declare_parameter('safe_threshold', 15)
         self.declare_parameter('best_point_conv_size', 200)
-        self.declare_parameter('max_steer', 1.181) # 40 degree
+        self.declare_parameter('max_steer', 0.349066) # 20 degree
         self.declare_parameter('straights_steering_angle', 0.1396)  # 8 degree
         self.declare_parameter('fast_steering_angle', 0.0698)   # 4 degree
         self.declare_parameter('corners_speed', 1.5)
