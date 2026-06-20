@@ -47,26 +47,68 @@ The `ackermann_mux` in the subsystem stack gives the human teleop operator prior
 
 ## Packages
 
-| Package | Algorithm | Sensors Used |
+| Package | Role | Sensors Used |
 |---|---|---|
+| `autonomy_core` | Shared library: `BaseDriveNode` + `lidar_utils` (no algorithm) | — |
 | `follow_the_gap` | Reactive gap-following planner | LiDAR (`/scan`) |
+
+---
+
+## Architecture: how algorithms stay modular
+
+Every algorithm is built on `autonomy_core`, which owns the repetitive ROS
+plumbing so each planner is small and testable:
+
+- **`BaseDriveNode`** (`autonomy_core/base_drive_node.py`) — handles parameter
+  loading, the `/scan` (and optional `/odom`) subscriptions, `/drive`
+  publishing, the safety stop on bad/missing LiDAR, and status logging. A
+  subclass only implements `compute_drive(scan_msg) -> (steering, speed) | None`.
+- **`lidar_utils`** (`autonomy_core/lidar_utils.py`) — ROS-free NumPy helpers
+  (FOV cropping, smoothing, clipping, beam-index-to-steering) shared across
+  algorithms and unit-testable on their own.
+
+The algorithm itself lives in a plain Python class with no ROS imports (see
+`follow_the_gap/planner.py`), so it can be unit-tested with synthetic scans.
 
 ---
 
 ## Adding a New Package
 
-1. Create the package inside `src/`:
+1. Create the package inside `src/`, depending on `autonomy_core`:
 
 ```bash
 cd ~/blaze_racer/autonomy_ws/src
-ros2 pkg create --build-type ament_python <package_name> --dependencies rclpy sensor_msgs ackermann_msgs
+ros2 pkg create --build-type ament_python <package_name> \
+    --dependencies rclpy sensor_msgs ackermann_msgs autonomy_core
 ```
 
-2. Implement a node that subscribes to `/scan` (and optionally `/odom`) and publishes to `/drive`.
+2. Put the algorithm in a plain Python class (no ROS) — easy to unit-test.
 
-3. Add a launch file and a `config/params.yaml`.
+3. Add a node that subclasses `BaseDriveNode` and implements `compute_drive`:
 
-4. Build and source:
+```python
+from autonomy_core.base_drive_node import BaseDriveNode
+from .planner import MyPlanner
+
+DEFAULT_PARAMS = {'max_steer': 0.349, 'speed': 2.0}  # algorithm tunables
+
+
+class MyNode(BaseDriveNode):
+    def __init__(self):
+        super().__init__('my_node', DEFAULT_PARAMS, uses_odom=False)
+        self.planner = MyPlanner(self.params)
+
+    def compute_drive(self, scan_msg):
+        # return (steering_angle_rad, speed_mps), or None to stop
+        return self.planner.plan(
+            scan_msg.ranges, scan_msg.angle_min, scan_msg.angle_increment)
+```
+
+4. Add a launch file and a `config/params.yaml` (declare the same keys as
+   `DEFAULT_PARAMS`). The subsystem stack needs no changes — the `/scan` →
+   `/drive` contract is unchanged.
+
+5. Build and source:
 
 ```bash
 cd ~/blaze_racer/autonomy_ws

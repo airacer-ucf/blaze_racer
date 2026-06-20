@@ -1,268 +1,60 @@
 #!/usr/bin/env python3
+"""
+ROS 2 node wrapping the Follow-the-Gap planner.
+
+All ROS plumbing (scan/odom subscriptions, drive publishing, safety stop,
+status logging, parameter loading) lives in :class:`BaseDriveNode`. This file
+only declares the algorithm's tunables and hands each scan to the planner —
+the pattern every new algorithm in this workspace should follow.
+"""
 
 import rclpy
-from rclpy.node import Node
-from sensor_msgs.msg import LaserScan
-from ackermann_msgs.msg import AckermannDriveStamped
-import numpy as np
-from argparse import Namespace
+
+from autonomy_core.base_drive_node import BaseDriveNode
+
+from .planner import FollowTheGapPlanner
+
+# Algorithm tunables. Merged on top of BaseDriveNode's defaults (topics,
+# frame_id, status_interval). See config/params.yaml for the deployed values.
+#
+# NOTE: bubble_radius, safe_threshold and best_point_conv_size are measured in
+# *scan indices*, evaluated after the FOV crop. They are resolution-dependent,
+# so re-tune them if the LiDAR or fov_degrees changes.
+DEFAULT_PARAMS = {
+    'fov_degrees': 180.0,          # forward field of view actually used
+    'bubble_radius': 30,           # half-width of the safety bubble, in beams
+    'preprocess_conv_size': 3,     # moving-average window for noise smoothing
+    'max_lidar_dist': 10.0,        # ranges are clamped to this (metres)
+    'safe_threshold': 15,          # min gap width to be preferred, in beams
+    'best_point_conv_size': 200,   # aim-point smoothing window, in beams
+    'max_steer': 0.349066,         # 20 deg steering limit
+    'steering_gain': 0.5,          # bearing-to-steering damping factor
+    'straights_steering_angle': 0.1396,  # 8 deg
+    'fast_steering_angle': 0.0698,       # 4 deg
+    'corners_speed': 1.5,
+    'straights_speed': 2.0,
+    'fast_speed': 3.5,
+}
 
 
-class FollowTheGapNode(Node):
+class FollowTheGapNode(BaseDriveNode):
+    """Reactive gap-following node: subscribes to /scan, publishes /drive."""
+
     def __init__(self):
-        super().__init__('follow_the_gap_node')
-        
-        # Parameters
-        self.declare_parameter('bubble_radius', 30)
-        self.declare_parameter('preprocess_conv_size', 3)
-        self.declare_parameter('max_lidar_dist', 10.0)
-        self.declare_parameter('safe_threshold', 15)
-        self.declare_parameter('best_point_conv_size', 200)
-        self.declare_parameter('max_steer', 0.349066) # 20 degree
-        self.declare_parameter('straights_steering_angle', 0.1396)  # 8 degree
-        self.declare_parameter('fast_steering_angle', 0.0698)   # 4 degree
-        self.declare_parameter('corners_speed', 1.5)
-        self.declare_parameter('straights_speed', 2.0)
-        self.declare_parameter('fast_speed', 3.5)
-        self.declare_parameter('status_interval', 0.5)  # seconds between terminal status messages
-        
-        # Load parameters
-        self.params = self.get_parameters_as_namespace()
+        """Initialise the base node and construct the planner."""
+        super().__init__('follow_the_gap_node', DEFAULT_PARAMS, uses_odom=False)
+        self.planner = FollowTheGapPlanner(self.params)
 
-        # Initialize statistics and rate-limiting
-        self.min_speed = float('inf')
-        self.max_speed = float('-inf')
-        self.min_angle = float('inf')
-        self.max_angle = float('-inf')
-        self.last_status_time_ns = 0
-        
-        # Publishers and subscribers
-        self.scan_sub = self.create_subscription(
-            LaserScan,
-            '/scan',
-            self.scan_callback,
-            10)
-        
-        self.drive_pub = self.create_publisher(
-            AckermannDriveStamped,
-            '/drive',
-            10)
-        
-        self.get_logger().info('Follow the Gap node has been initialized')
-
-    def get_parameters_as_namespace(self):
-        """Convert ROS 2 parameters to a Namespace object similar to the example code"""
-        params_dict = {
-            'bubble_radius': self.get_parameter('bubble_radius').value,
-            'preprocess_conv_size': self.get_parameter('preprocess_conv_size').value,
-            'max_lidar_dist': self.get_parameter('max_lidar_dist').value,
-            'safe_threshold': self.get_parameter('safe_threshold').value,
-            'best_point_conv_size': self.get_parameter('best_point_conv_size').value,
-            'max_steer': self.get_parameter('max_steer').value,
-            'straights_steering_angle': self.get_parameter('straights_steering_angle').value,
-            'fast_steering_angle': self.get_parameter('fast_steering_angle').value,
-            'corners_speed': self.get_parameter('corners_speed').value,
-            'straights_speed': self.get_parameter('straights_speed').value,
-            'fast_speed': self.get_parameter('fast_speed').value,
-            'status_interval': self.get_parameter('status_interval').value,
-        }
-        return Namespace(**params_dict)
-
-    def scan_callback(self, scan_msg):
-        """Process LiDAR scan and publish drive commands"""
-        # Convert scan to numpy array
-        raw_ranges = np.array(scan_msg.ranges)
-
-        # If no valid lidar input, warn (rate-limited) and publish stop command
-        if raw_ranges.size == 0 or np.count_nonzero(np.isfinite(raw_ranges)) == 0:
-            now_ns = self.get_clock().now().nanoseconds
-            if now_ns - self.last_status_time_ns > (self.params.status_interval * 1e9):
-                self.get_logger().warning('No valid LiDAR input received. Publishing stop command.')
-                self.last_status_time_ns = now_ns
-
-            # Publish zero speed and zero steering to be safe
-            stop_msg = AckermannDriveStamped()
-            stop_msg.header.stamp = self.get_clock().now().to_msg()
-            stop_msg.header.frame_id = "base_link"
-            stop_msg.drive.steering_angle = 0.0
-            stop_msg.drive.speed = 0.0
-            self.drive_pub.publish(stop_msg)
-            return
-        
-        ranges = np.array(raw_ranges)
-        
-        # Replace inf values with max_lidar_dist
-        ranges = np.clip(ranges, 0, self.params.max_lidar_dist)
-        
-        # Process scan data
-        proc_ranges = self.preprocess_lidar(ranges)
-        
-        # Find closest point to LiDAR
-        closest = proc_ranges.argmin()
-
-        # Eliminate all points inside 'bubble' (set them to zero)
-        min_index = closest - self.params.bubble_radius
-        max_index = closest + self.params.bubble_radius
-        if min_index < 0: min_index = 0
-        if max_index >= len(proc_ranges): max_index = len(proc_ranges) - 1
-        proc_ranges[min_index:max_index] = 0
-
-        # Find max length gap
-        gap_start, gap_end = self.find_max_gap(proc_ranges)
-        
-        # If no valid gap found, try to find any non-zero points
-        if gap_start is None or gap_end is None:
-            non_zero_indices = np.nonzero(proc_ranges)[0]
-            if len(non_zero_indices) > 0:
-                # If there are some non-zero points, pick the farthest one
-                best_idx = np.argmax(proc_ranges)
-            else:
-                # If everything is zero, just go straight
-                best_idx = len(proc_ranges) // 2
-        else:
-            # Find the best point in the gap
-            best_idx = self.find_best_point(gap_start, gap_end, proc_ranges)
-
-        # Calculate steering angle
-        steering_angle = self.get_angle(best_idx, len(proc_ranges))
-        
-        # Determine speed based on steering angle
-        if abs(steering_angle) > self.params.straights_steering_angle:
-            speed = self.params.corners_speed
-        elif abs(steering_angle) > self.params.fast_steering_angle:
-            speed = self.params.straights_speed
-        else:
-            speed = self.params.fast_speed
-        
-        # Create and publish drive message
-        drive_msg = AckermannDriveStamped()
-        drive_msg.header.stamp = self.get_clock().now().to_msg()
-        drive_msg.header.frame_id = "base_link"
-        drive_msg.drive.steering_angle = steering_angle
-        drive_msg.drive.speed = speed
-        
-        self.drive_pub.publish(drive_msg)
-        
-        # Update stats
-        if speed < self.min_speed:
-            self.min_speed = speed
-        if speed > self.max_speed:
-            self.max_speed = speed
-        if steering_angle < self.min_angle:
-            self.min_angle = steering_angle
-        if steering_angle > self.max_angle:
-            self.max_angle = steering_angle
-
-        # Rate-limited status logging
-        now_ns = self.get_clock().now().nanoseconds
-        if now_ns - self.last_status_time_ns > (self.params.status_interval * 1e9):
-            # convert angles from radians to degrees for human-readable output
-            deg_current = np.degrees(steering_angle)
-            deg_min = np.degrees(self.min_angle) if self.min_angle not in (float('inf'), float('-inf')) else float('nan')
-            deg_max = np.degrees(self.max_angle) if self.max_angle not in (float('inf'), float('-inf')) else float('nan')
-            self.get_logger().info(
-                f"Status - current_speed={speed:.2f}, current_angle_deg={deg_current:.2f}, "
-                f"min_speed={self.min_speed:.2f}, max_speed={self.max_speed:.2f}, "
-                f"min_angle_deg={deg_min:.2f}, max_angle_deg={deg_max:.2f}"
-            )
-            self.last_status_time_ns = now_ns
-        
-        # debug log in degrees
-        deg_steer = np.degrees(steering_angle)
-        self.get_logger().debug(f"Published: steering_deg={deg_steer:.2f}, speed={speed:.2f}")
-
-    def preprocess_lidar(self, ranges):
-        """
-        Preprocess the LiDAR scan array:
-        1. Use only the forward-facing scan points
-        2. Set each value to the mean over some window
-        3. Reject high values
-        """
-        self.radians_per_elem = (2 * np.pi) / len(ranges)
-        
-        # Use only forward-facing points
-        proc_ranges = np.array(ranges[:])
-        
-        # Apply moving average
-        proc_ranges = np.convolve(proc_ranges, 
-                                 np.ones(self.params.preprocess_conv_size), 
-                                 'same') / self.params.preprocess_conv_size
-        
-        # Clip values to max distance
-        proc_ranges = np.clip(proc_ranges, 0, self.params.max_lidar_dist)
-        
-        return proc_ranges
-
-    def find_max_gap(self, free_space_ranges):
-        """
-        Return the start index & end index of the max gap in free_space_ranges
-        free_space_ranges: list of LiDAR data which contains a 'bubble' of zeros
-        """
-        # Mask the bubble
-        masked = np.ma.masked_where(free_space_ranges == 0, free_space_ranges)
-        
-        # Get slices for each contiguous sequence of non-bubble data
-        slices = np.ma.notmasked_contiguous(masked)
-        
-        if slices is None or len(slices) == 0:
-            return None, None
-        
-        # Find longest slice that's above the safety threshold
-        max_len = 0
-        chosen_slice = None
-        
-        for sl in slices:
-            sl_len = sl.stop - sl.start
-            if sl_len > max_len and sl_len > self.params.safe_threshold:
-                max_len = sl_len
-                chosen_slice = sl
-        
-        if chosen_slice is not None:
-            return chosen_slice.start, chosen_slice.stop
-        elif len(slices) > 0:
-            # If no slice meets the threshold, return the largest one
-            max_slice = max(slices, key=lambda s: s.stop - s.start)
-            return max_slice.start, max_slice.stop
-        else:
-            return None, None
-
-    def find_best_point(self, start_i, end_i, ranges):
-        """
-        Start_i & end_i are start and end indices of max-gap range, respectively
-        Return index of best point in ranges
-        Uses sliding window average over the data in the max gap
-        """
-        # Handle edge case where the gap is too small for convolution
-        if end_i - start_i < self.params.best_point_conv_size:
-            # Just return the middle of the gap
-            return start_i + (end_i - start_i) // 2
-        
-        # Do a sliding window average over the data in the max gap
-        averaged_max_gap = np.convolve(
-            ranges[start_i:end_i],
-            np.ones(self.params.best_point_conv_size), 
-            'same') / self.params.best_point_conv_size
-        
-        return averaged_max_gap.argmax() + start_i
-
-    def get_angle(self, range_index, range_len):
-        """
-        Get the angle of a particular element in the lidar data and 
-        transform it into an appropriate steering angle
-        """
-        lidar_angle = (range_index - (range_len / 2)) * self.radians_per_elem
-        steering_angle = lidar_angle / 2
-        
-        # Clip the steering angle to the maximum steering angle
-        steering_angle = np.clip(steering_angle, -self.params.max_steer, self.params.max_steer)
-        
-        return steering_angle
+    def compute_drive(self, scan_msg):
+        """Delegate to the planner; the base class handles publishing/stops."""
+        return self.planner.plan(
+            scan_msg.ranges, scan_msg.angle_min, scan_msg.angle_increment)
 
 
 def main(args=None):
+    """Spin the Follow-the-Gap node until interrupted."""
     rclpy.init(args=args)
     node = FollowTheGapNode()
-    
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

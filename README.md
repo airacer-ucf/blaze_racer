@@ -44,7 +44,7 @@ Open two terminals:
 ```bash
 cd ~/blaze_racer/subsystem_ws
 source install/setup.bash
-ros2 launch subsystem_stack bringup.launch.py
+ros2 launch subsystem_stack bringup_launch.py
 ```
 
 **Terminal 2 -- autonomy**
@@ -76,9 +76,17 @@ The subsystem workspace must already be running (bringup launched) before starti
 
 ### Autonomy Packages
 
+#### autonomy_core (shared library)
+
+`autonomy_core` holds the reusable scaffolding every algorithm builds on: a
+`BaseDriveNode` that handles the `/scan`→`/drive` ROS plumbing and safety stop,
+plus ROS-free `lidar_utils`. New algorithms subclass `BaseDriveNode` and
+implement a single `compute_drive` method — see `autonomy_ws/README.md` for the
+pattern. It ships no algorithm of its own.
+
 #### Follow the Gap algorithm
 
-The `follow_the_gap` package implements the Disparity Extender / Follow-the-Gap reactive planner. It processes raw LiDAR scans and publishes Ackermann drive commands in real time with no map or localization required.
+The `follow_the_gap` package implements the Disparity Extender / Follow-the-Gap reactive planner. It processes raw LiDAR scans and publishes Ackermann drive commands in real time with no map or localization required. The gap-following logic lives in a pure, unit-tested `planner.py`; the node is a thin `BaseDriveNode` subclass.
 
 ---
 
@@ -93,12 +101,12 @@ cd ~/blaze_racer/subsystem_ws
 rosdep install --from-paths src --ignore-src -r -y
 colcon build --symlink-install
 source install/setup.bash
-ros2 launch subsystem_stack bringup.launch.py
+ros2 launch subsystem_stack bringup_launch.py
 ```
 
 ### Packages
 
-**subsystem_stack** -- Master package. Contains the single `bringup.launch.py` that starts the full driver stack and all parameter files consumed by every other node.
+**subsystem_stack** -- Master package. Contains the single `bringup_launch.py` that starts the full driver stack and all parameter files consumed by every other node.
 
 **realsense_rgb** -- Publishes the D435i's color stream as `sensor_msgs/Image` via V4L2, with no depth or point-cloud overhead. Can be launched standalone or is included automatically by the bringup.
 
@@ -122,7 +130,7 @@ Both `realsense_rgb` and `camera_capture` are present in the bringup launch file
 
 ### Nodes launched by bringup
 
-The `bringup.launch.py` file starts the following nodes in order:
+The `bringup_launch.py` file starts the following nodes in order:
 
 1. `joy` -- joystick driver
 2. `joy_teleop` -- maps joystick axes and buttons to `AckermannDriveStamped` commands

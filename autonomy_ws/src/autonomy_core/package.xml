@@ -1,17 +1,17 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>follow_the_gap</name>
+  <name>autonomy_core</name>
   <version>0.0.0</version>
-  <description>Follow the Gap reactive planner</description>
+  <description>Shared base classes and LiDAR utilities for autonomy algorithms</description>
   <maintainer email="israelcharlesic10@gmail.com">Israel Charles</maintainer>
   <license>MIT</license>
 
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
+  <depend>nav_msgs</depend>
   <depend>ackermann_msgs</depend>
   <depend>python3-numpy</depend>
-  <depend>autonomy_core</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

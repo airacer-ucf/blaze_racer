@@ -29,7 +29,7 @@ rosdep install --from-paths src -i -y
 ```bash
 colcon build --symlink-install
 source install/setup.bash
-ros2 launch subsystem_stack bringup.launch.py
+ros2 launch subsystem_stack bringup_launch.py
 ```
 
 ## Deadman's Switch
@@ -155,6 +155,17 @@ rosdep install --from-paths src --ignore-src -r -y
 |------------------|------------------------------------------------------------|
 | `subsystem_stack`| Bringup launch file and parameter files for the full stack |
 | `realsense_rgb`  | RGB-only RealSense D435i node |
+| `camera_capture` | Saves photos/videos from the camera on joystick button press |
+
+### Vendored packages
+
+`vesc`, `ackermann_mux`, and `teleop_tools` under `src/` are upstream
+third-party packages vendored directly in-tree (no git submodules). To sync
+with upstream, re-pull from the sources listed in **External Dependencies**:
+
+- `vesc` — https://github.com/f1tenth/vesc/tree/ros2
+- `ackermann_mux` — https://github.com/f1tenth/ackermann_mux
+- `teleop_tools` — https://index.ros.org/p/teleop_tools
 
 ### realsense_rgb
 
@@ -166,10 +177,13 @@ Standalone launch:
 ros2 launch realsense_rgb realsense_rgb.launch.py
 ```
 
-When `subsystem_stack` is launched, `realsense_rgb_node` is included
-automatically.
+The `realsense_rgb_node` is present in `bringup_launch.py` but commented out by
+default. Uncomment its `ld.add_action(...)` line to include it automatically,
+or run the standalone launch above.
 
 ## Nodes Launched by Bringup
+
+These nodes are enabled by default in `bringup_launch.py`:
 
 1. `joy` - joystick driver
 2. `joy_teleop` - joystick to Ackermann command mapping
@@ -178,7 +192,10 @@ automatically.
 5. `vesc_driver_node` - low-level VESC driver
 6. `urg_node` - Hokuyo LiDAR driver
 7. `ackermann_mux` - multiplexer for Ackermann command sources
-8. `realsense_rgb_node` - RealSense D435i RGB stream
+8. `static_transform_publisher` - fixed `base_link` -> `laser` transform
+
+Commented out by default (uncomment in `bringup_launch.py` to enable):
+`throttle_interpolator`, `realsense_rgb_node`, `camera_capture_node`.
 
 ## Node Parameters and Topics
 
