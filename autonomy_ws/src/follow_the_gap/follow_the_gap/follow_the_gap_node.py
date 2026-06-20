@@ -24,9 +24,17 @@ class FollowTheGapNode(Node):
         self.declare_parameter('corners_speed', 1.5)
         self.declare_parameter('straights_speed', 2.0)
         self.declare_parameter('fast_speed', 3.5)
+        self.declare_parameter('status_interval', 0.5)  # seconds between terminal status messages
         
         # Load parameters
         self.params = self.get_parameters_as_namespace()
+
+        # Initialize statistics and rate-limiting
+        self.min_speed = float('inf')
+        self.max_speed = float('-inf')
+        self.min_angle = float('inf')
+        self.max_angle = float('-inf')
+        self.last_status_time_ns = 0
         
         # Publishers and subscribers
         self.scan_sub = self.create_subscription(
@@ -56,13 +64,32 @@ class FollowTheGapNode(Node):
             'corners_speed': self.get_parameter('corners_speed').value,
             'straights_speed': self.get_parameter('straights_speed').value,
             'fast_speed': self.get_parameter('fast_speed').value,
+            'status_interval': self.get_parameter('status_interval').value,
         }
         return Namespace(**params_dict)
 
     def scan_callback(self, scan_msg):
         """Process LiDAR scan and publish drive commands"""
         # Convert scan to numpy array
-        ranges = np.array(scan_msg.ranges)
+        raw_ranges = np.array(scan_msg.ranges)
+
+        # If no valid lidar input, warn (rate-limited) and publish stop command
+        if raw_ranges.size == 0 or np.count_nonzero(np.isfinite(raw_ranges)) == 0:
+            now_ns = self.get_clock().now().nanoseconds
+            if now_ns - self.last_status_time_ns > (self.params.status_interval * 1e9):
+                self.get_logger().warning('No valid LiDAR input received. Publishing stop command.')
+                self.last_status_time_ns = now_ns
+
+            # Publish zero speed and zero steering to be safe
+            stop_msg = AckermannDriveStamped()
+            stop_msg.header.stamp = self.get_clock().now().to_msg()
+            stop_msg.header.frame_id = "base_link"
+            stop_msg.drive.steering_angle = 0.0
+            stop_msg.drive.speed = 0.0
+            self.drive_pub.publish(stop_msg)
+            return
+        
+        ranges = np.array(raw_ranges)
         
         # Replace inf values with max_lidar_dist
         ranges = np.clip(ranges, 0, self.params.max_lidar_dist)
@@ -116,7 +143,33 @@ class FollowTheGapNode(Node):
         
         self.drive_pub.publish(drive_msg)
         
-        self.get_logger().debug(f"Published: steering={steering_angle:.2f}, speed={speed:.2f}")
+        # Update stats
+        if speed < self.min_speed:
+            self.min_speed = speed
+        if speed > self.max_speed:
+            self.max_speed = speed
+        if steering_angle < self.min_angle:
+            self.min_angle = steering_angle
+        if steering_angle > self.max_angle:
+            self.max_angle = steering_angle
+
+        # Rate-limited status logging
+        now_ns = self.get_clock().now().nanoseconds
+        if now_ns - self.last_status_time_ns > (self.params.status_interval * 1e9):
+            # convert angles from radians to degrees for human-readable output
+            deg_current = np.degrees(steering_angle)
+            deg_min = np.degrees(self.min_angle) if self.min_angle not in (float('inf'), float('-inf')) else float('nan')
+            deg_max = np.degrees(self.max_angle) if self.max_angle not in (float('inf'), float('-inf')) else float('nan')
+            self.get_logger().info(
+                f"Status - current_speed={speed:.2f}, current_angle_deg={deg_current:.2f}, "
+                f"min_speed={self.min_speed:.2f}, max_speed={self.max_speed:.2f}, "
+                f"min_angle_deg={deg_min:.2f}, max_angle_deg={deg_max:.2f}"
+            )
+            self.last_status_time_ns = now_ns
+        
+        # debug log in degrees
+        deg_steer = np.degrees(steering_angle)
+        self.get_logger().debug(f"Published: steering_deg={deg_steer:.2f}, speed={speed:.2f}")
 
     def preprocess_lidar(self, ranges):
         """

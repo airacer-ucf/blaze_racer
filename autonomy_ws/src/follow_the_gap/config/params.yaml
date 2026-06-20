@@ -8,6 +8,7 @@ follow_the_gap_node:
     max_steer: 0.349066
     straights_steering_angle: 0.1396
     fast_steering_angle: 0.0698
-    corners_speed: 3.0
-    straights_speed: 6.0
-    fast_speed: 9.0
+    corners_speed: 2.0
+    straights_speed: 5.0
+    fast_speed: 8.0
+    status_interval: 0.5
