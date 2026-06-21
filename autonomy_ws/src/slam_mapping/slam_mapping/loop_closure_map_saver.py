@@ -56,6 +56,12 @@ class LoopClosureMapSaver(Node):
         # --- Where and how to save ---
         self.declare_parameter('map_save_dir', '~/maps')
         self.declare_parameter('map_name', 'blaze_track')
+        # What to do when a map of the same name already exists on disk:
+        #   'increment' (default) - save alongside it as <name>_1, <name>_2, ...
+        #       so an existing map is never clobbered. map_saver_cli refuses to
+        #       overwrite, so this also avoids the save failing outright.
+        #   'overwrite' - reuse <name>, replacing the previous map files.
+        self.declare_parameter('existing_map_policy', 'increment')
         # Image/threshold settings
         self.declare_parameter('image_format', 'png')
         self.declare_parameter('map_mode', 'trinary')
@@ -92,6 +98,8 @@ class LoopClosureMapSaver(Node):
         self.map_save_dir = os.path.expanduser(
             self.get_parameter('map_save_dir').value)
         self.map_name = self.get_parameter('map_name').value
+        self.existing_map_policy = \
+            self.get_parameter('existing_map_policy').value
         self.image_format = self.get_parameter('image_format').value
         self.map_mode = self.get_parameter('map_mode').value
         self.occupied_thresh = self.get_parameter('occupied_thresh').value
@@ -107,6 +115,18 @@ class LoopClosureMapSaver(Node):
             self.get_parameter('serialize_pose_graph').value
         self.shutdown_after_save = \
             self.get_parameter('shutdown_after_save').value
+
+        if self.existing_map_policy not in ('increment', 'overwrite'):
+            self.get_logger().warning(
+                "Unknown existing_map_policy '%s'; defaulting to 'increment'."
+                % self.existing_map_policy)
+            self.existing_map_policy = 'increment'
+
+        # Output path is resolved once (the first time it is needed) and cached
+        # so the image, .yaml and pose graph all share the same base name even
+        # in 'increment' mode (where each file written would otherwise bump the
+        # suffix again).
+        self._resolved_path = None
 
         # Lap-tracking state.
         self.start_xy = None      # pose where mapping began
@@ -218,10 +238,38 @@ class LoopClosureMapSaver(Node):
         """Return the Euclidean distance between two (x, y) points."""
         return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
 
+    def _map_exists(self, base):
+        """True if a map image or .yaml already exists at this base path."""
+        return (os.path.exists('%s.%s' % (base, self.image_format))
+                or os.path.exists('%s.yaml' % base))
+
     def _map_path(self):
-        """Return the absolute output path (no extension) for the map files."""
+        """Return the absolute output path (no extension) for the map files.
+
+        Resolved once and cached. With ``existing_map_policy: overwrite`` this
+        is always ``<dir>/<name>``. With ``increment`` (default) it is the first
+        free name in the ``<name>``, ``<name>_1``, ``<name>_2``, ... sequence so
+        an existing map is preserved (and the save does not fail).
+        """
+        if self._resolved_path is not None:
+            return self._resolved_path
+
         os.makedirs(self.map_save_dir, exist_ok=True)
-        return os.path.join(self.map_save_dir, self.map_name)
+        base = os.path.join(self.map_save_dir, self.map_name)
+
+        if self.existing_map_policy == 'overwrite' or not self._map_exists(base):
+            self._resolved_path = base
+        else:
+            i = 1
+            while self._map_exists('%s_%d' % (base, i)):
+                i += 1
+            self._resolved_path = '%s_%d' % (base, i)
+            self.get_logger().info(
+                "Map '%s' already exists; saving as '%s' "
+                '(existing_map_policy: increment).'
+                % (base, self._resolved_path))
+
+        return self._resolved_path
 
     def save_map(self):
         """Save the occupancy grid as <name>.<fmt> + <name>.yaml via nav2."""

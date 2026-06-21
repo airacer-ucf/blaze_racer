@@ -98,6 +98,7 @@ Visualize SLAM live in RViz2 (`Fixed Frame: map`, add a `Map` display on
 | Parameter | Default | Meaning |
 |---|---|---|
 | `map_save_dir` / `map_name` | `~/maps` / `blaze_track` | Output location and base filename |
+| `existing_map_policy` | `increment` | When a map with that name already exists: `increment` saves `blaze_track_1`, `_2`, … (never clobbers, and avoids the save failing); `overwrite` replaces it |
 | `image_format` / `map_mode` | `png` / `trinary` | Saved image format / occupancy encoding |
 | `occupied_thresh` / `free_thresh` | `0.45` / `0.196` | Occupancy thresholds written to the `.yaml` |
 | `min_lap_distance` | `8.0` | Path length (m) required before a lap can close — set near your track length |

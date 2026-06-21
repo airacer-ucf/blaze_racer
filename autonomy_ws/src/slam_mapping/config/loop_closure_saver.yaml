@@ -20,6 +20,12 @@ loop_closure_map_saver:
     # Output location and format. occupied_thresh/free_thresh and the png
     map_save_dir: "~/blaze_racer/maps"
     map_name: "blaze_track"
+    # What to do when a map with this name already exists:
+    #   'increment' - save as blaze_track_1, blaze_track_2, ... (never clobbers;
+    #                 also avoids the save failing, since map_saver won't
+    #                 overwrite an existing file).
+    #   'overwrite' - reuse blaze_track, replacing the previous files.
+    existing_map_policy: "increment"
     image_format: "png"
     map_mode: "trinary"
     occupied_thresh: 0.45
