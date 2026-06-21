@@ -1,0 +1,43 @@
+# Parameters for the loop_closure_map_saver node.
+#
+# The node tracks the robot pose and saves the slam_toolbox map the instant the
+# car completes a lap (drives away from the start, then returns within
+# loop_closure_radius after covering at least min_lap_distance).
+
+loop_closure_map_saver:
+  ros__parameters:
+    # Pose source: 'tf' uses the SLAM-corrected map -> base_link transform
+    # (recommended, works in every odom mode); 'odom' uses the /odom topic.
+    pose_source: tf
+    map_frame: map
+    base_frame: base_link
+    pose_rate: 10.0
+
+    # Input topics (odom_topic used only when pose_source is 'odom').
+    odom_topic: /odom
+    map_topic: /map
+
+    # Output location and format. occupied_thresh/free_thresh and the png
+    map_save_dir: "~/blaze_racer/maps"
+    map_name: "blaze_track"
+    image_format: "png"
+    map_mode: "trinary"
+    occupied_thresh: 0.45
+    free_thresh: 0.196
+    save_timeout: 30.0
+
+    # Lap-detection geometry (metres). Tune min_lap_distance to roughly your
+    # track length so a save only happens after a genuine full lap.
+    min_lap_distance: 8.0
+    loop_closure_radius: 1.0
+    departure_radius: 2.5
+    # Robustness: ignore single odom jumps larger than this (m), and require a
+    # lap to take at least this long (s) before saving.
+    max_odom_step: 0.5
+    min_lap_time: 5.0
+
+    # After saving the occupancy grid, also serialize the slam_toolbox pose
+    # graph (<map_name>.posegraph/.data) for later localization mode.
+    serialize_pose_graph: true
+    # Keep the node alive after saving (set true to stop the process instead).
+    shutdown_after_save: false
