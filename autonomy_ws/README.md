@@ -51,6 +51,12 @@ The `ackermann_mux` in the subsystem stack gives the human teleop operator prior
 |---|---|---|
 | `autonomy_core` | Shared library: `BaseDriveNode` + `lidar_utils` (no algorithm) | — |
 | `follow_the_gap` | Reactive gap-following planner | LiDAR (`/scan`) |
+| `slam_mapping` | SLAM track mapping; auto-saves the map on loop closure | LiDAR (`/scan`), odom (`/odom`) |
+
+> `slam_mapping` is a perception/mapping package, not a driving algorithm — it
+> consumes `/scan` + `/odom` and produces a saved map rather than `/drive`. Run
+> it alongside teleop or any planner to map a track. See
+> [`slam_mapping/README.md`](src/slam_mapping/README.md).
 
 ---
 

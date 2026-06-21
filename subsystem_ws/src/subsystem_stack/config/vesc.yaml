@@ -31,8 +31,14 @@ vesc_to_odom_node:
   ros__parameters:
     odom_frame: odom
     base_frame: base_link
-    # publish odom to base link tf
-    publish_tf: true
+    # publish odom -> base_link tf.
+    # FALSE on this car: the motor is sensorless (no encoder), so VESC-derived
+    # odometry is unreliable. The slam_mapping/cmd_odometry node is the single
+    # source of the odom -> base_link transform instead. Having two publishers
+    # of that transform breaks slam_toolbox (it drops every scan). Set back to
+    # true only if a real wheel-odometry source is restored AND cmd_odometry is
+    # not used.
+    publish_tf: false
     use_servo_cmd_to_calc_angular_velocity: true
     # car wheelbase is about 25cm
     wheelbase: .33

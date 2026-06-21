@@ -21,8 +21,8 @@ follow_the_gap_node:
     # Speed banding by steering magnitude (radians / metres-per-second).
     straights_steering_angle: 0.1396  # 8 deg
     fast_steering_angle: 0.0698       # 4 deg
-    corners_speed: 3.0
-    straights_speed: 6.0
-    fast_speed: 9.0
+    corners_speed: 2.0
+    straights_speed: 4.0
+    fast_speed: 6.0
 
     status_interval: 0.5  # seconds between terminal status messages

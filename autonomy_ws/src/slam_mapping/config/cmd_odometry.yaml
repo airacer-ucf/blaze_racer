@@ -1,0 +1,25 @@
+# Command-based (dead-reckoning) odometry for the sensorless drivetrain.
+#
+# Integrates the VESC actuator commands into an odom -> base_link estimate so
+# slam_toolbox has a motion prior. The gains MUST match
+# subsystem_stack/config/vesc.yaml, otherwise the odometry scale is wrong.
+
+cmd_odometry:
+  ros__parameters:
+    # Commanded actuator topics (outputs of ackermann_to_vesc).
+    speed_topic: /commands/motor/speed
+    servo_topic: /commands/servo/position
+
+    # VESC conversion gains — keep in sync with vesc.yaml.
+    speed_to_erpm_gain: 4214.0
+    speed_to_erpm_offset: 0.0
+    steering_to_servo_gain: -0.8375
+    steering_to_servo_offset: 0.409375
+    wheelbase: 0.33
+
+    # Frames / output.
+    odom_frame: odom
+    base_frame: base_link
+    odom_topic: /odom
+    publish_rate: 50.0
+    publish_tf: true
