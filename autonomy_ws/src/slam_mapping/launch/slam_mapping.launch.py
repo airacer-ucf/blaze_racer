@@ -133,7 +133,7 @@ def generate_launch_description():
         use_sim_time_arg,
         rviz_arg,
         static_odom_tf,
-        cmd_odometry_node,
+        #cmd_odometry_node,
         slam_node,
         saver_node,
         rviz_node,
