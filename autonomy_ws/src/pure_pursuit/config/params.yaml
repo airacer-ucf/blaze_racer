@@ -1,0 +1,45 @@
+pure_pursuit_node:
+  ros__parameters:
+    # ---- Path source ----------------------------------------------------
+    # A bare filename is resolved against the installed package's
+    # 'waypoints' directory; an absolute path is used unchanged. Swap in your
+    # own track here (e.g. track_centerline_smooth.csv).
+    waypoints_file: /home/f1tenth-open/blaze_racer/autonomy_ws/src/pure_pursuit/waypoints/track_centerline.csv
+    waypoints_delimiter: ","
+    x_col: 0
+    y_col: 1
+    velocity_col: 2
+    default_velocity: 1.0     # used only if a row has no velocity column
+
+    # ---- Pose source ----------------------------------------------------
+    # Odometry topic the controller localises against. Set to your stack's
+    # map-frame pose source:
+    #   gym sim          -> /ego_racecar/odom
+    #   real car (PF)    -> the Odometry your particle filter publishes
+    #   raw wheel odom   -> /odom
+    odom_topic: /odom
+
+    # ---- Geometry / control --------------------------------------------
+    wheelbase: 0.33           # front-to-rear axle distance (metres)
+    lookahead_distance: 1.0   # base lookahead distance (metres)
+    lookahead_gain: 0.0       # extra lookahead per m/s (0 = fixed lookahead)
+    min_lookahead: 0.5        # lower clamp on lookahead (metres)
+    max_lookahead: 3.0        # upper clamp on lookahead (metres)
+    max_steer: 0.349066       # steering limit, 20 deg (radians)
+
+    # ---- Speed shaping --------------------------------------------------
+    velocity_gain: 1.0        # global multiplier on the profile speed
+    min_speed: 0.0            # lower clamp (m/s)
+    max_speed: 7.0            # upper clamp (m/s)
+
+    # ---- Visualization --------------------------------------------------
+    map_frame: map            # frame the waypoints are expressed in
+    marker_topic: /pure_pursuit/markers
+    publish_markers: true
+    marker_period: 0.5        # seconds between path re-publishes
+
+    # ---- Inherited from BaseDriveNode ----------------------------------
+    drive_topic: /drive
+    scan_topic: /scan         # only used as the loop clock / dead-LiDAR guard
+    frame_id: base_link
+    status_interval: 0.5

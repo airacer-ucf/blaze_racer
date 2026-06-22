@@ -62,6 +62,7 @@ class BaseDriveNode(Node):
         self.min_angle = float('inf')
         self.max_angle = float('-inf')
         self.last_status_time_ns = 0
+        self.last_warn_time_ns = 0      # separate timer so warnings don't mute status logs
 
         # Standard interface: subscribe to the LiDAR, publish drive commands.
         self.scan_sub = self.create_subscription(
@@ -140,9 +141,9 @@ class BaseDriveNode(Node):
     def _warn_rate_limited(self, message):
         """Emit a warning at most once per ``status_interval`` seconds."""
         now_ns = self.get_clock().now().nanoseconds
-        if now_ns - self.last_status_time_ns > self.params.status_interval * 1e9:
+        if now_ns - self.last_warn_time_ns > self.params.status_interval * 1e9:
             self.get_logger().warning(message)
-            self.last_status_time_ns = now_ns
+            self.last_warn_time_ns = now_ns
 
     def _log_status(self, speed, steering_angle):
         """Track speed/angle extremes and log a summary, rate-limited."""
@@ -152,7 +153,7 @@ class BaseDriveNode(Node):
         self.max_angle = max(self.max_angle, steering_angle)
 
         now_ns = self.get_clock().now().nanoseconds
-        if now_ns - self.last_status_time_ns <= self.params.status_interval * 1e9:
+        if now_ns - self.last_status_time_ns < self.params.status_interval * 1e9:
             return
 
         # Angles are reported in degrees for human readability.
