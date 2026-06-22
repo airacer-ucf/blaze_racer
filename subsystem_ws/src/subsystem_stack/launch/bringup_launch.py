@@ -144,6 +144,13 @@ def generate_launch_description():
         arguments=['0.27', '0.0', '0.11', '0.0', '0.0', '0.0', 'base_link', 'laser']
     )
 
+    static_tf_node_2 = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='static_baselink_to_base_footprint',
+        arguments=['0.0', '0.0', '0.0', '0.0', '0.0', '0.0', 'base_link', 'base_footprint']
+    )
+
     realsense_node = Node(
         package='realsense_rgb',
         executable='realsense_rgb_node',
@@ -175,6 +182,7 @@ def generate_launch_description():
 
     ld.add_action(ackermann_mux_node)
     ld.add_action(static_tf_node)
+    ld.add_action(static_tf_node_2)
 
     # Uncomment following line to add camera node(s) to the stack
     # ld.add_action(realsense_node)

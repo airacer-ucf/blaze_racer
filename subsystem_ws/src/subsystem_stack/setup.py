@@ -25,7 +25,6 @@ setup(
     entry_points={
         'console_scripts': [
             'throttle_interpolator = subsystem_stack.throttle_interpolator:main',
-            'tf_publisher = subsystem_stack.tf_publisher:main'
         ],
     },
 )
