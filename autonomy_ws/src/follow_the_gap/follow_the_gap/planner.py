@@ -12,7 +12,9 @@ The pipeline mirrors the classic RoboRacer "Follow the Gap" / Disparity Extender
 2. smooth to suppress single-beam noise,
 3. zero out a safety "bubble" around the closest obstacle,
 4. find the widest remaining gap and aim at the best point inside it,
-5. pick a speed from the steering magnitude (slower in corners).
+5. pick a speed — either from the steering magnitude (slower in corners) or
+   from the measured clearance straight ahead (farther → faster), depending
+   on the ``use_distance_speed`` parameter.
 """
 
 import numpy as np
@@ -61,6 +63,11 @@ class FollowTheGapPlanner:
         closest = proc_ranges.argmin()
         min_index = max(closest - p.bubble_radius, 0)
         max_index = min(closest + p.bubble_radius, len(proc_ranges) - 1)
+
+        # Measure front clearance *before* the bubble wipes out those beams.
+        front_dist = self._front_clearance(proc_ranges, angle_of_first,
+                                           angle_increment)
+
         proc_ranges[min_index:max_index] = 0
 
         # 4. Aim at the best point inside the widest free gap.
@@ -79,9 +86,37 @@ class FollowTheGapPlanner:
             best_idx, angle_of_first, angle_increment, p.max_steer,
             gain=p.steering_gain)
 
-        # 5. Slow down as the steering angle grows.
-        speed = self._select_speed(steering_angle)
+        # 5. Pick speed from either front clearance or steering magnitude.
+        if getattr(p, 'use_distance_speed', False):
+            speed = self._select_speed_by_distance(front_dist)
+        else:
+            speed = self._select_speed(steering_angle)
         return steering_angle, speed
+
+    def _front_clearance(self, ranges, angle_of_first, angle_increment):
+        """Return the mean range of beams within ``front_angle_width`` of 0 rad."""
+        p = self.params
+        half = getattr(p, 'front_angle_width', 0.1745) / 2.0  # default 10 deg
+        n = len(ranges)
+        # Map the ±half window around bearing 0 to array indices.
+        i_center = int(round(-angle_of_first / angle_increment))
+        i_half = max(1, int(round(half / angle_increment)))
+        i_start = max(0, i_center - i_half)
+        i_end = min(n, i_center + i_half + 1)
+        window = ranges[i_start:i_end]
+        if window.size == 0:
+            return p.max_lidar_dist
+        return float(np.mean(window))
+
+    def _select_speed_by_distance(self, front_dist):
+        """Linearly interpolate speed from front clearance (farther → faster)."""
+        p = self.params
+        d_min = getattr(p, 'dist_min_speed', 1.0)
+        d_max = getattr(p, 'dist_max_speed', 5.0)
+        v_min = getattr(p, 'distance_min_speed', p.corners_speed)
+        v_max = getattr(p, 'distance_max_speed', p.fast_speed)
+        t = np.clip((front_dist - d_min) / max(d_max - d_min, 1e-6), 0.0, 1.0)
+        return float(v_min + t * (v_max - v_min))
 
     def _select_speed(self, steering_angle):
         """Pick a speed band from the steering magnitude (slower in corners)."""

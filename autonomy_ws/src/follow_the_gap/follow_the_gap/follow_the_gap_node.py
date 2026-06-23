@@ -34,6 +34,14 @@ DEFAULT_PARAMS = {
     'corners_speed': 1.5,
     'straights_speed': 2.0,
     'fast_speed': 3.5,
+    # Distance-based speed mode (disabled by default).
+    # Set use_distance_speed: true in params.yaml to activate.
+    'use_distance_speed': False,
+    'front_angle_width': 0.1745,   # 10 deg window centred on 0 rad
+    'dist_min_speed': 1.0,         # at this clearance (m) use distance_min_speed
+    'dist_max_speed': 5.0,         # at this clearance (m) use distance_max_speed
+    'distance_min_speed': 1.5,     # slowest speed under distance mode
+    'distance_max_speed': 4.5,     # fastest speed under distance mode
 }
 
 

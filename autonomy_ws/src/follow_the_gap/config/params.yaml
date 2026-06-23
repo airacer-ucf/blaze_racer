@@ -25,4 +25,16 @@ follow_the_gap_node:
     straights_speed: 3.0
     fast_speed: 4.5
 
+    # --- Distance-based speed mode ---
+    # When use_distance_speed is true, speed is determined by the average range
+    # of beams within front_angle_width radians of straight ahead (0 rad):
+    # closer obstacles → slower, farther obstacles → faster.
+    # The steering-magnitude banding above is ignored in this mode.
+    use_distance_speed: true
+    front_angle_width: 0.1745    # 10 deg window centred on 0 rad
+    dist_min_speed: 1.0          # clearance (m) that maps to distance_min_speed
+    dist_max_speed: 5.0          # clearance (m) that maps to distance_max_speed
+    distance_min_speed: 1.5      # slowest speed (m/s) used in distance mode
+    distance_max_speed: 4.5      # fastest speed (m/s) used in distance mode
+
     status_interval: 1.0  # seconds between terminal status messages
